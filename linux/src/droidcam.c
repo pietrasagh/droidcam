@@ -1,5 +1,5 @@
 /* DroidCam & DroidCamX (C) 2010-
- * Author: Aram G. (dev47@dev47apps.com)
+ * Author: Aram G. (dev47apps.com)
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of

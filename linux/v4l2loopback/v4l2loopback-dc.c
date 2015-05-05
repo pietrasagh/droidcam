@@ -16,7 +16,7 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
  * Use at your own risk.
  *
- * Source has been modified for DroidCam. (dev47@dev47apps.com)
+ * Source has been modified for DroidCam (dev47apps.com).
  *
  */
 

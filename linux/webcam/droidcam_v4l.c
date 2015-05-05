@@ -1,5 +1,5 @@
 /* DroidCam V4L2 Driver (C) 2010-
- * Author: Aram G. (dev47@dev47apps.com)
+ * Author: Aram G. (dev47apps.com)
  * Feel free to improve this implementation .. do let me know if you do.
  *
  * This program is distributed in the hope that it will be useful,
