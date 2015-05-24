@@ -2130,7 +2130,7 @@ init_vdev           (struct video_device *vdev)
   strlcpy(vdev->name, "Loopback video device", sizeof(vdev->name));
 
 #if 0
-  //todo: remove V4L2_STD stuff (gone in kenrel 3.11?)
+  //todo: remove V4L2_STD stuff
   vdev->tvnorms      = V4L2_STD_ALL;
   vdev->current_norm = V4L2_STD_ALL;
 #endif
