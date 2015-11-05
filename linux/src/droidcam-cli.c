@@ -74,8 +74,22 @@ _wait:
     }
 
     if (decoder_prepare_video(stream_buf) == FALSE) { goto _out; }
+
     while (1){
-        if (SendRecv(0, stream_buf, VIDEO_INBUF_SZ, videoSocket) == FALSE || DecodeVideo(stream_buf, VIDEO_INBUF_SZ) == FALSE) { break; }
+        int frameLen;
+        char *p = stream_buf;
+        if (SendRecv(0, p, 4, videoSocket) == FALSE) goto _out;
+        make_int4(frameLen, p[0], p[1], p[2], p[3]);
+        SetImageFrameSize(frameLen);
+
+        p = GetImageFrameBuf();
+        while (frameLen > 4096) {
+            if (SendRecv(0, p, 4096, videoSocket) == FALSE) goto _out;
+            frameLen -= 4096;
+            p += 4096;
+        }
+        if (SendRecv(0, p, frameLen, videoSocket) == FALSE) goto _out;
+        if (DecodeFrame() == FALSE) break;
     }
 
 _out:

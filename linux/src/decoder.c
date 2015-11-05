@@ -23,6 +23,8 @@
 #include "libavformat/avformat.h"
 #include "libswscale/swscale.h"
 
+#define VIDEO_FMT_DROIDCAM 3
+#define VIDEO_FMT_DROIDCAMX 18
 #define VIDEO_BUF_FRAMES   16 // H.263 Frames to Buffer
 #define VIDEO_BUF_SLEEP_MS 40 // 25fps (MediaRecoder seems to ignore the specified fps)
 
@@ -44,7 +46,7 @@ static uint8_t * m_shareFrameBuf = NULL; // buffer for the webcam
 static int m_shareFrameBufSize;
 
 // static GThread* hDisplayThread = NULL;
-static unsigned m_DecodeSeqNum, m_DisplaySeqNum; // Used in H263 for thread sync
+//static unsigned m_DecodeSeqNum, m_DisplaySeqNum; // Used in H263 for thread sync
 
 static AVPacket        v_packet;
 static AVCodec        *v_codec_b, *v_codec_c;
@@ -163,11 +165,11 @@ int  decoder_init(int w, int h){
     av_init_packet(&v_packet);
     //av_init_packet(&a_packet);
 
-    v_codec_b = avcodec_find_decoder(CODEC_ID_H263);
+    //v_codec_b = avcodec_find_decoder(CODEC_ID_H263);
     v_codec_c = avcodec_find_decoder(CODEC_ID_MJPEG);
     //a_codec = avcodec_find_decoder(CODEC_ID_AMR_NB);
 
-    if (!v_codec_b || !v_codec_c ){//|| !a_codec) {
+    if (!v_codec_c) {
         MSG_ERROR("Decoder Error (1)");
         goto _error_out;
     }
@@ -188,7 +190,10 @@ int decoder_prepare_video(char * header)
 {
     int ret = FALSE;
 
-    #define make_int(num, b1, b2)   num = 0; num |=(b1&0xFF); num <<= 8; num |= (b2&0xFF);
+    // Dirty hack to get around bug in doridcam v4.x
+    if (header[0] == 'H' && header[1] == 'T' && header[2] == 'T' && header[3] == 'P'){
+        goto UPDATE_APP_MSG;
+    }
 
     make_int(m_width,  header[0], header[1]);
     make_int(m_height, header[2], header[3]);
@@ -198,22 +203,23 @@ int decoder_prepare_video(char * header)
         goto _error_out;
     }
     m_format = (int) header[4];
-    m_format = m_format % 3;
-    if (m_format == 0) m_format = 3;
-    dbgprint("W=%d H=%d Fmt=%d (%d)\n", m_width, m_height, m_format, (int) header[4]);
+    dbgprint("W=%d H=%d Fmt=%d\n", m_width, m_height, m_format);
+
+    if (m_format != VIDEO_FMT_DROIDCAM && m_format != VIDEO_FMT_DROIDCAMX) {
+UPDATE_APP_MSG:
+        MSG_ERROR("Unrecongized app version, please check for latest app updates.");
+        goto _error_out;
+    }
+
+    if (m_format > VIDEO_FMT_DROIDCAMX) {
+        MSG_ERROR("Unrecongized app version, please check for latest client updates.");
+        goto _error_out;
+    }
+
 
     decode_frame = avcodec_alloc_frame();
 
-    if (m_format == VIDEO_FMT_YUV) {
-        m_videoStreamBufSize = 0;
-        m_videoStreamFrameLen = YUV_BUFFER_SZ(m_width, m_height);
-        m_videoStreamBuf = (uint8_t*)av_malloc((m_videoStreamFrameLen + VIDEO_INBUF_SZ) * sizeof(uint8_t));
-
-        swc = sws_getContext(m_width, m_height, PIX_FMT_NV21, /* src */
-                             share_w, share_h , PIX_FMT_YUV420P, /* dst */
-                             SWS_FAST_BILINEAR /* flags */, NULL, NULL, NULL);
-        dbgprint("yuv buffer %p\n", m_videoStreamBuf);
-    } else {
+    if (1) {
         v_context = avcodec_alloc_context();
 
         if (!v_context || !decode_frame){
@@ -229,37 +235,6 @@ int decoder_prepare_video(char * header)
                                  share_w, share_h , PIX_FMT_YUV420P, /* dst */
                                  SWS_FAST_BILINEAR /* flags */, NULL, NULL, NULL);
 
-        if (m_format == VIDEO_FMT_H263){
-            #if 0
-            v_context->flags |= CODEC_FLAG_TRUNCATED;
-            v_context->flags |= CODEC_FLAG_LOW_DELAY;
-
-            if (avcodec_open(v_context, v_codec_b) < 0) {
-                MSG_ERROR("Decoder Error (3)");
-                goto _error_out;
-            }
-
-            // H.263 frames are decoded in 'batches' resulting in bursts
-            // We have to buffer the frames and play them smoothly
-            // in a seperate thread (hDisplayThread).
-            // Frames will be decoded then resized INTO m_videoStreamBuf
-            // via scan_ptr and scan_frame.
-
-            m_videoStreamFrameLen = YUV_BUFFER_SZ(share_w, share_h);
-            m_videoStreamBufSize  = m_videoStreamFrameLen * VIDEO_BUF_FRAMES;
-            m_videoStreamBuf = (uint8_t*)av_malloc(m_videoStreamBufSize * sizeof(uint8_t));
-
-            scan_frame = avcodec_alloc_frame();
-            scan_ptr   = m_videoStreamBuf;
-
-            m_DecodeSeqNum = m_DisplaySeqNum = 0;
-            hDisplayThread = g_thread_create(DisplayThreadProc, NULL, TRUE, NULL);
-            dbgprint("Allocated h263 buffer %p (len=%d)\n", m_videoStreamBuf, m_videoStreamBufSize);
-            #else
-             goto _error_out;
-            #endif
-        }
-        else {
             if (avcodec_open(v_context, v_codec_c) < 0) {
                 MSG_ERROR("Decoder Error (4)");
                 goto _error_out;
@@ -269,14 +244,7 @@ int decoder_prepare_video(char * header)
             m_videoStreamFrameLen = YUV_BUFFER_SZ(m_width, m_height);
             m_videoStreamBuf = (uint8_t*)av_malloc((m_videoStreamFrameLen) * sizeof(uint8_t));
 
-            // Uncompressed jpeg is yuv420p size
-            // We would need to scan the incoming buffer for EOI marker
-            // But instead we just fill the buffer a bit and consume
-            m_videoStreamFrameLen /= 4;
-
             dbgprint("Allocated jpeg buffer %p (limit = %d)\n", m_videoStreamBuf, m_videoStreamFrameLen);
-        }
-
     }
     ret = TRUE;
 
@@ -298,7 +266,29 @@ void decoder_cleanup()
     /// FREE_OBJECT(hDisplayThread, g_thread_join);
 }
 
+char *GetImageFrameBuf() {
+    return (char*)m_videoStreamBuf;
+}
 
+void SetImageFrameSize(int len) {
+    v_packet.size = len;
+}
+
+int DecodeFrame() {
+    int len, have_frame = 0;
+    v_packet.data = m_videoStreamBuf;
+    if ((len = avcodec_decode_video2(v_context, decode_frame, &have_frame, &v_packet)) < 0){
+        printf("VIDEO DECODE ERROR (%d)\n", have_frame);
+        return FALSE;
+    }
+    if (have_frame) {
+        sws_scale(swc, decode_frame->data, decode_frame->linesize, 0, m_height, share_frame->data, share_frame->linesize);
+        SHARE_FRAME(m_shareFrameBuf, m_shareFrameBufSize);
+    }
+    return TRUE;
+}
+
+#if 0
 int DecodeVideo(char * data, int length)
 {
     if (m_format == VIDEO_FMT_YUV){
@@ -411,16 +401,10 @@ int DecodeVideo(char * data, int length)
     return TRUE;
 }
 
-// audio comes in Androids AMR-NB encoding
 int DecodeAudio(char * data, int length){
-	// todo
-	// len = avcodec_decode_audio3(a_context, (short *)(m_audioDecodeBuf + m_audioDecodeBufSize), &in_out, &a_packet);
-	// if (len < 0 || a_context->sample_fmt != SAMPLE_FMT_S16){
-	//		dbgprint("AUDIO DECODE ERROR len=%d fmt=%d\n", len, a_context->sample_fmt);
-	//		return FALSE;
-	//	}
     return FALSE;
 }
+#endif
 
 int GetVideoWidth(){
     return m_width;

@@ -214,10 +214,7 @@ _wait:
 	// We are the server
 	if (videoSocket == INVALID_SOCKET)
 	{
-		videoSocket = (g_settings.connection == CB_RADIO_BTH)
-			? accept_bth_connection()
-			: accept_inet_connection(atoi(gtk_entry_get_text(g_settings.portEntry)));
-
+		videoSocket = accept_inet_connection(atoi(gtk_entry_get_text(g_settings.portEntry)));
 		if (videoSocket == INVALID_SOCKET)
 			goto _out;
 
@@ -248,8 +245,20 @@ _wait:
 			SendRecv(1, stream_buf, L, videoSocket);
 			thread_cmd = 0;
 		}
-		if ( SendRecv(0, stream_buf, VIDEO_INBUF_SZ, videoSocket) == FALSE || DecodeVideo(stream_buf, VIDEO_INBUF_SZ) == FALSE)
-			break;
+		int frameLen;
+		char *p = stream_buf;
+		if (SendRecv(0, p, 4, videoSocket) == FALSE) goto _out;
+		make_int4(frameLen, p[0], p[1], p[2], p[3]);
+		SetImageFrameSize(frameLen);
+
+		p = GetImageFrameBuf();
+		while (frameLen > 4096) {
+			if (SendRecv(0, p, 4096, videoSocket) == FALSE) goto _out;
+			frameLen -= 4096;
+			p += 4096;
+		}
+		if (SendRecv(0, p, frameLen, videoSocket) == FALSE) goto _out;
+		if (DecodeFrame() == FALSE) break;
 	}
 
 _out:
@@ -493,9 +502,6 @@ int main(int argc, char *argv[])
 	gtk_box_pack_start(GTK_BOX(vbox), widget, FALSE, FALSE, 0);
 	widget = gtk_radio_button_new_with_label(gtk_radio_button_group(GTK_RADIO_BUTTON(widget)), "Wifi Server Mode");
 	g_signal_connect(widget, "toggled", G_CALLBACK(the_callback), (gpointer)CB_WIFI_SRVR);
-	gtk_box_pack_start(GTK_BOX(vbox), widget, FALSE, FALSE, 0);
-	widget = gtk_radio_button_new_with_label(gtk_radio_button_group(GTK_RADIO_BUTTON(widget)), "Bluetooth");
-	g_signal_connect(widget, "toggled", G_CALLBACK(the_callback), (gpointer)CB_RADIO_BTH);
 	gtk_box_pack_start(GTK_BOX(vbox), widget, FALSE, FALSE, 0);
 	widget = gtk_radio_button_new_with_label(gtk_radio_button_group(GTK_RADIO_BUTTON(widget)), "USB (over adb)");
 	g_signal_connect(widget, "toggled", G_CALLBACK(the_callback), (gpointer)CB_RADIO_ADB);

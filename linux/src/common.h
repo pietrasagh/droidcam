@@ -12,14 +12,21 @@
 #define MSG_ERROR(str)     ShowError("Error",str)
 #define MSG_LASTERROR(str) ShowError(str,strerror(errno))
 
+#define make_int(num, b1, b2)	num = 0; num |=(b1&0xFF); num <<= 8; num |= (b2&0xFF);
+#define make_int4(num, b0, b1, b2, b3) \
+		num = 0; \
+		num |= (b3&0xFF); num <<= 8; \
+		num |= (b2&0xFF); num <<= 8; \
+		num |= (b1&0xFF); num <<= 8; \
+		num |= (b0&0xFF)
+
 extern void ShowError();
 
-#define OTHER_REQ "COMMAND /other %d" 
-#define VIDEO_REQ "COMMAND /videre %dx%d" 
-#define AUDIO_REQ "COMMAND /audire"
+#define VIDEO_REQ "CMD /v2/video?%dx%d" 
+#define OTHER_REQ "CMD /v1/ctl?%d"
 
 #define errprint(...) fprintf(stderr, __VA_ARGS__)
-// #define dbgprint      errprint
+//#define dbgprint      errprint
 #define dbgprint(...) /* NIL */
 
 #define YUV_BUFFER_SZ(w,h) (w*h*3/2)

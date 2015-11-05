@@ -17,8 +17,9 @@ void decoder_fini();
 int  decoder_prepare_video(char * header);
 void decoder_cleanup();
 
-int DecodeVideo(char * data, int length);
-int DecodeAudio(char * data, int length);
+char *GetImageFrameBuf();
+void SetImageFrameSize(int len);
+int DecodeFrame();
 
 int GetVideoWidth();
 int GetVideoHeight();
